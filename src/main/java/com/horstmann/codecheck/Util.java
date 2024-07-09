@@ -46,14 +46,12 @@ import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 public class Util {
-    private static Random generator = new Random();
+    private static final Random generator = new Random();
 
     // Generics
     
     public static <T> Iterable<T> iterable(Iterator<T> iterator) { 
-        return new Iterable<T>() { 
-            public Iterator<T> iterator() { return iterator; } 
-        }; 
+        return () -> iterator; 
     }
     
     // String handling
@@ -61,7 +59,7 @@ public class Util {
     public static <T> String join(Collection<T> items, String separator) {
         return items.stream().map(Object::toString).collect(Collectors.joining(separator));
     }
-    // TODO if separator is "\n", add a terminal one
+    
     public static <T> String join(T[] items, String separator) {
         return Stream.of(items).map(Object::toString).collect(Collectors.joining(separator));
     }
@@ -213,6 +211,7 @@ public class Util {
         return out.toString();
     }
     
+    @SuppressWarnings("deprecation")
     public static String runProcess(String command, int millis) {
         try {
             Process process = Runtime.getRuntime().exec(command);
@@ -226,11 +225,11 @@ public class Util {
             result.append(err);
             if (!completed) {
                 process.destroyForcibly();
-                result.append("\nTimeout after " + millis + " milliseconds\n");
+                result.append("\nTimeout after ").append(millis).append(" milliseconds\n");
             }
             result.append(out);
             return result.toString();
-        } catch (Exception ex) {
+        } catch (IOException | InterruptedException ex) {
             return ex.getMessage();
         }
     }
@@ -242,14 +241,12 @@ public class Util {
         if (s == null) return b;
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
-            if (c == '<')
-                b.append("&lt;");
-            else if (c == '>')
-                b.append("&gt;");
-            else if (c == '&')
-                b.append("&amp;");
-            else
-                b.append(c);
+            switch (c) {
+                case '<' -> b.append("&lt;");
+                case '>' -> b.append("&gt;");
+                case '&' -> b.append("&amp;");
+                default -> b.append(c);
+            }
         }
         return b;
     }
@@ -300,18 +297,19 @@ public class Util {
     
     public static byte[] zip(Map<Path, byte[]> contents) throws IOException {
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
-        ZipOutputStream zout = new ZipOutputStream(bout);
-        for (Map.Entry<Path, byte[]> entry : contents.entrySet()) {
-           ZipEntry ze = new ZipEntry(entry.getKey().toString());
-           zout.putNextEntry(ze);
-           zout.write(entry.getValue());
-           zout.closeEntry();
+        try (ZipOutputStream zout = new ZipOutputStream(bout)) {
+            for (Map.Entry<Path, byte[]> entry : contents.entrySet()) {
+                ZipEntry ze = new ZipEntry(entry.getKey().toString());
+                zout.putNextEntry(ze);
+                zout.write(entry.getValue());
+                zout.closeEntry();
+            }
         }
-        zout.close();
         return bout.toByteArray();
     }
         
     static class FileMap extends TreeMap<Path, byte[]> {
+        @Override
         public String toString() {
             StringBuilder result = new StringBuilder();
             for (Map.Entry<Path, byte[]> entry : entrySet()) {
@@ -321,7 +319,7 @@ public class Util {
                 try {
                     result.append(new String(entry.getValue(), StandardCharsets.UTF_8));
                 } catch (Exception e) {
-                    result.append("(binary, " + entry.getValue().length + " bytes)");
+                    result.append("(binary, ").append(entry.getValue().length).append(" bytes)");
                 }
             }
             if (result.length() == 0) result.append("{}");
@@ -343,16 +341,16 @@ public class Util {
     
     public static Map<Path, byte[]> unzip(byte[] bytes) throws IOException {
         Map<Path, byte[]> result = new FileMap(); 
-        ZipInputStream zin = new ZipInputStream(new ByteArrayInputStream(bytes));
-        ZipEntry entry;
-        while ((entry = zin.getNextEntry()) != null)
-        {
-            String name = entry.getName();
-            if (!entry.isDirectory() && !name.startsWith("__MACOSX") && !name.endsWith(".DS_Store"))
-                result.put(Paths.get(name), zin.readAllBytes());
-            zin.closeEntry();
+        try (ZipInputStream zin = new ZipInputStream(new ByteArrayInputStream(bytes))) {
+            ZipEntry entry;
+            while ((entry = zin.getNextEntry()) != null)
+            {
+                String name = entry.getName();
+                if (!entry.isDirectory() && !name.startsWith("__MACOSX") && !name.endsWith(".DS_Store"))
+                    result.put(Paths.get(name), zin.readAllBytes());
+                zin.closeEntry();
+            }
         }
-        zin.close();
         return result;
     }
     
@@ -372,7 +370,7 @@ public class Util {
     }
     
     public static Map<Path, String> descendantTextFiles(Path dir) throws IOException {
-        Map<Path, String> result = new TreeMap<Path, String>(); 
+        Map<Path, String> result = new TreeMap<>(); 
         if (dir == null || !Files.exists(dir))
             return result;
         Files.walkFileTree(dir, new SimpleFileVisitor<Path>() {
@@ -388,6 +386,7 @@ public class Util {
     
     // HTTP
     
+    @SuppressWarnings("deprecation")
     public static byte[] fileUpload(String urlString, String fieldName, String fileName, byte[] bytes) throws IOException {
         final int TIMEOUT = 90000; // 90 seconds
         String boundary = "===" + createPrivateUID() + "===";
@@ -438,6 +437,7 @@ public class Util {
         }        
     }
     
+    @SuppressWarnings("deprecation")
     public static String httpPost(String urlString, String content, String contentType) {
         StringBuilder result = new StringBuilder();
         try {
@@ -465,7 +465,7 @@ public class Util {
                     result.append("\n");
                 }
             }           
-        } catch (Throwable ex) {
+        } catch (IOException ex) {
             result.append(getStackTrace(ex));
         }
         return result.toString();       
@@ -513,14 +513,14 @@ public class Util {
                         URLDecoder.decode(kvpair.substring(n + 1), "UTF-8"));
                 }
             }
-        } catch (UnsupportedEncodingException e) {
+        } catch (UnsupportedEncodingException | URISyntaxException e) {
             // UTF-8 is supported
-        } catch (URISyntaxException e1) {
-            // Return empty map
         }
+        // Return empty map
         return params;
     }
 
+    @SuppressWarnings("deprecation")
     public static boolean exists(String url) {
         boolean result = false;
         try {
@@ -531,7 +531,7 @@ public class Util {
             } finally {
                 conn.disconnect();
             }
-        } catch (Exception ex) {
+        } catch (IOException ex) {
         }
         return result;
     }

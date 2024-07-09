@@ -55,7 +55,7 @@ interface ProblemConnection {
     void delete(String repo, String key) throws IOException;
     byte[] read(String repo, String key) throws IOException;
 }
-
+/*
 class ProblemS3Connection implements ProblemConnection {
     private String bucketSuffix;
     private AmazonS3 amazonS3;
@@ -74,6 +74,7 @@ class ProblemS3Connection implements ProblemConnection {
 
         bucketSuffix = config.getValue("com.horstmann.codecheck.s3.bucketsuffix", String.class);
     }
+
 
     public void write(Path file, String repo, String key) throws IOException {
         String bucket = repo + "." + bucketSuffix;
@@ -134,7 +135,7 @@ class ProblemS3Connection implements ProblemConnection {
         return bytes;
     }
 }
-
+*/
 class ProblemLocalConnection implements ProblemConnection {
     private Path root;
     private static final Logger logger = Logger.getLogger(ProblemLocalConnection.class);
