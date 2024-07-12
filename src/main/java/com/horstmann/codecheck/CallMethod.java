@@ -79,7 +79,7 @@ public class CallMethod {
         }
     }
 
-    @SuppressWarnings("deprecation")
+    @SuppressWarnings({ "deprecation", "removal" })
     private Object callMethod(Class<?> cl, int i, List<String> paramValues, int timeout) throws Throwable {
         final Method method = getMethod(cl, i);
         final Object obj = (method.getModifiers() & Modifier.STATIC) == 0 ? cl.newInstance() : null;
@@ -93,6 +93,7 @@ public class CallMethod {
         
         final AtomicBoolean done = new AtomicBoolean(false);
         final Thread mainmethodThread = new Thread() {
+            @Override
             public void run() {
                 try {
                     result[0] = method.invoke(obj, methodArgs);

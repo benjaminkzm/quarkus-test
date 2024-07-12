@@ -1,40 +1,28 @@
 package models;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
-
-import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
-
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.amazonaws.services.s3.model.ObjectMetadata;
-import com.horstmann.codecheck.Util;
 
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import com.horstmann.codecheck.Util;
+
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
+
 @Singleton
 public class ProblemConnector {
-    private ProblemConnection delegate;
+    private final ProblemConnection delegate;
 
     @Inject
     public ProblemConnector(@ConfigProperty(name = "com.horstmann.codecheck.s3.region") String s3Region) {
         Config config = ConfigProvider.getConfig();
-        if (s3Region != null && !s3Region.isEmpty()) {
-            delegate = new ProblemS3Connection(config);
-        } else {
-            delegate = new ProblemLocalConnection(config);
-        }
+        delegate = new ProblemLocalConnection(config);
     }
 
     public void write(byte[] contents, String repo, String key) throws IOException {
@@ -149,6 +137,7 @@ class ProblemLocalConnection implements ProblemConnection {
         }
     }
 
+    @Override
     public void write(byte[] contents, String repo, String key) throws IOException {
         try {
             Path repoPath = root.resolve(repo);
@@ -162,6 +151,7 @@ class ProblemLocalConnection implements ProblemConnection {
         }
     }
 
+    @Override
     public void delete(String repo, String key) throws IOException {
         Path repoPath = root.resolve(repo);
         Path directoryPath = repoPath.resolve(key);
@@ -173,6 +163,7 @@ class ProblemLocalConnection implements ProblemConnection {
         }
     }
 
+    @Override
     public byte[] read(String repo, String key) throws IOException {
         byte[] result;
         try {

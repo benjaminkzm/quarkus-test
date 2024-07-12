@@ -23,6 +23,10 @@ import javax.script.ScriptEngine;
 import javax.script.ScriptEngineManager;
 import javax.script.ScriptException;
 
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.horstmann.codecheck.Main;
 import com.horstmann.codecheck.Plan;
 import com.horstmann.codecheck.Problem;
@@ -131,7 +135,7 @@ public class CodeCheck {
                     String toEval = contents.substring(from + leftLength, to);
                     if (toEval.contains(leftDelimiter))
                         return null; // Nested
-                    result.append("" + engine.eval(toEval));
+                    result.append("").append(engine.eval(toEval));
                 }
             }
         }

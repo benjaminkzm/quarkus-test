@@ -3,25 +3,23 @@ package controllers;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.Path;
-import java.util.Base64;
 import java.util.Map;
 import java.util.TreeMap;
 
-import javax.inject.Inject;
-import javax.script.ScriptException;
-import javax.ws.rs.*;
-import javax.ws.rs.core.*;
+import jakarta.enterprise.context.RequestScoped;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.*;
 
-import com.horstmann.codecheck.Plan;
-import com.horstmann.codecheck.Problem;
-import com.horstmann.codecheck.Report;
 import com.horstmann.codecheck.Util;
 
 import models.CodeCheck;
 
-@Path("/upload")
+import org.jboss.resteasy.reactive.RestForm;
+
+@RequestScoped
+@jakarta.ws.rs.Path("/upload")
 public class Upload {
     final String repo = "ext";
 
@@ -29,15 +27,16 @@ public class Upload {
     private CodeCheck codeCheck;
 
     @POST
-    @Path("/files")
+    @jakarta.ws.rs.Path("/files")
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
     @Produces(MediaType.TEXT_HTML)
-    public Response uploadFiles(@FormParam("request") String request) {
+    public Response uploadFiles(@FormParam(value = "request")
+            String request, String problem, String editKey) {
         return uploadFiles(request, com.horstmann.codecheck.Util.createPublicUID(), Util.createPrivateUID());
     }
 
     @POST
-    @Path("/editedFiles/{problem}/{editKey}")
+    @jakarta.ws.rs.Path("/editedFiles/{problem}/{editKey}")
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
     @Produces(MediaType.TEXT_HTML)
     public Response editedFiles(@FormParam("request") String request, @PathParam("problem") String problem, @PathParam("editKey") String editKey) {
@@ -54,48 +53,53 @@ public class Upload {
     }
 
     @POST
-    @Path("/files/{problem}/{editKey}")
+    @jakarta.ws.rs.Path("/files")
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
     @Produces(MediaType.TEXT_HTML)
-    public Response uploadFiles(@FormParam("request") String request, @PathParam("problem") String problem, @PathParam("editKey") String editKey) {
+    public Response uploadFiles(@RestForm Map<String, String> formData, @PathParam("problem") String problem, @PathParam("editKey") String editKey, @Context Http.Request request) {
         try {
             if (problem == null)
-                return Response.status(Response.Status.BAD_REQUEST).entity("No problem id").build();
+                return Response.status(Response.Status.BAD_REQUEST)
+                               .entity("No problem id").build();
+    
             int n = 1;
-            MultivaluedMap<String, String> params = Util.parseFormUrlEncoded(request);
+            Map<String, String[]> params = request.body().asFormUrlEncoded();
             Map<Path, byte[]> problemFiles = new TreeMap<>();
             while (params.containsKey("filename" + n)) {
-                String filename = params.getFirst("filename" + n);
+                String filename = params.get("filename" + n)[0];
                 if (filename.trim().length() > 0) {
-                    String contents = params.getFirst("contents" + n).replaceAll("\r\n", "\n");
+                    String contents = params.get("contents" + n)[0].replaceAll("\r\n", "\n");                    
                     problemFiles.put(Path.of(filename), contents.getBytes(StandardCharsets.UTF_8));
                 }
                 n++;
             }
             problemFiles.put(Path.of("edit.key"), editKey.getBytes(StandardCharsets.UTF_8));
+            
             String response = checkAndSaveProblem(request, problem, problemFiles);
-            return Response.ok(response).type(MediaType.TEXT_HTML).build();
+            return Response.ok(response).build();
         } catch (Exception ex) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(Util.getStackTrace(ex)).build();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                           .entity(Util.getStackTrace(ex)).build();
         }
     }
+    
 
     @POST
-    @Path("/problem")
+    @jakarta.ws.rs.Path("/problem")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     @Produces(MediaType.TEXT_HTML)
-    public Response uploadProblem(@FormParam("request") String request) {
-        return uploadProblem(request, com.horstmann.codecheck.Util.createPublicUID(), Util.createPrivateUID());
+    public Response uploadProblem(@RestForm("request") String request, @MultipartForm FileUploadForm form) {
+        return uploadProblem(request, com.horstmann.codecheck.Util.createPublicUID(), Util.createPrivateUID(), form);
     }
 
     @POST
-    @Path("/editedProblem/{problem}/{editKey}")
+    @jakarta.ws.rs.Path("/editedProblem/{problem}/{editKey}")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     @Produces(MediaType.TEXT_HTML)
-    public Response editedProblem(@FormParam("request") String request, @PathParam("problem") String problem, @PathParam("editKey") String editKey) {
+    public Response editedProblem(@RestForm("request") String request, @PathParam("problem") String problem, @PathParam("editKey") String editKey, @MultipartForm FileUploadForm form) {
         try {
             if (checkEditKey(problem, editKey))
-                return uploadProblem(request, problem, editKey);
+                return uploadProblem(request, problem, editKey, form);
             else
                 return Response.status(Response.Status.BAD_REQUEST).entity("Wrong edit key " + editKey + " of problem " + problem).build();
         } catch (IOException ex) {
@@ -106,20 +110,17 @@ public class Upload {
     }
 
     @POST
-    @Path("/problem/{problem}/{editKey}")
+    @jakarta.ws.rs.Path("/problem/{problem}/{editKey}")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     @Produces(MediaType.TEXT_HTML)
-    public Response uploadProblem(@FormParam("request") String request, @PathParam("problem") String problem, @PathParam("editKey") String editKey) {
+    public Response uploadProblem(@RestForm("request") String request, @PathParam("problem") String problem, @PathParam("editKey") String editKey, @MultipartForm FileUploadForm form) {
         try {
-            FormDataMultiPart multiPart = Util.parseMultipartFormData(request);
             if (problem == null)
                 return Response.status(Response.Status.BAD_REQUEST).entity("No problem id").build();
-            FormDataBodyPart zipPart = multiPart.getField("file");
-            InputStream fileInputStream = zipPart.getValueAs(InputStream.class);
-            byte[] contents = Util.readAllBytes(fileInputStream);
-            Map<Path, byte[]> problemFiles = Util.unzip(contents);
+            byte[] contents = Util.readAllBytes(form.file);
+            Map<java.nio.file.Path, byte[]> problemFiles = Util.unzip(contents);
             problemFiles = fixZip(problemFiles);
-            Path editKeyPath = Path.of("edit.key");
+            java.nio.file.Path editKeyPath = java.nio.file.Path.of("edit.key");
             if (!problemFiles.containsKey(editKeyPath))
                 problemFiles.put(editKeyPath, editKey.getBytes(StandardCharsets.UTF_8));
             String response = checkAndSaveProblem(request, problem, problemFiles);
@@ -130,15 +131,15 @@ public class Upload {
     }
 
     @POST
-    @Path("/editKeySubmit/{problem}/{editKey}")
+    @jakarta.ws.rs.Path("/editKeySubmit/{problem}/{editKey}")
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
     @Produces(MediaType.TEXT_HTML)
     public Response editKeySubmit(@FormParam("request") String request, @PathParam("problem") String problem, @PathParam("editKey") String editKey) {
         if (problem.equals(""))
             return Response.status(Response.Status.BAD_REQUEST).entity("No problem id").build();
         try {
-            Map<Path, byte[]> problemFiles = codeCheck.loadProblem(repo, problem);
-            Path editKeyPath = Path.of("edit.key");
+            Map<java.nio.file.Path, byte[]> problemFiles = codeCheck.loadProblem(repo, problem);
+            java.nio.file.Path editKeyPath = java.nio.file.Path.of("edit.key");
             if (!problemFiles.containsKey(editKeyPath))
                 return Response.status(Response.Status.BAD_REQUEST).entity("Wrong edit key " + editKey + " for problem " + problem).build();
             String correctEditKey = new String(problemFiles.get(editKeyPath), StandardCharsets.UTF_8);
@@ -146,8 +147,8 @@ public class Upload {
                 return Response.status(Response.Status.BAD_REQUEST).entity("Wrong edit key " + editKey + " for problem " + problem).build();
             }
             Map<String, String> filesAndContents = new TreeMap<>();
-            for (Map.Entry<Path, byte[]> entries : problemFiles.entrySet()) {
-                Path p = entries.getKey();
+            for (Map.Entry<java.nio.file.Path, byte[]> entries : problemFiles.entrySet()) {
+                java.nio.file.Path p = entries.getKey();
                 if (!p.getName(0).toString().equals("_outputs")) {
                     filesAndContents.put(p.toString(), new String(entries.getValue(), StandardCharsets.UTF_8));
                 }
@@ -163,19 +164,19 @@ public class Upload {
     }
 
     private boolean checkEditKey(String problem, String editKey) throws IOException {
-        Map<Path, byte[]> problemFiles = codeCheck.loadProblem(repo, problem);
-        Path editKeyPath = Path.of("edit.key");
+        Map<java.nio.file.Path, byte[]> problemFiles = codeCheck.loadProblem(repo, problem);
+        java.nio.file.Path editKeyPath = java.nio.file.Path.of("edit.key");
         if (problemFiles.containsKey(editKeyPath)) {
             String correctEditKey = new String(problemFiles.get(editKeyPath), StandardCharsets.UTF_8);
             return editKey.equals(correctEditKey.trim());
         } else return false;
     }
 
-    private String checkAndSaveProblem(HttpServletRequest request, String problem, Map<Path, byte[]> problemFiles)
-            throws IOException, InterruptedException, NoSuchMethodException, ScriptException {
+    private String checkAndSaveProblem(String request, String problem, Map<java.nio.file.Path, byte[]> problemFiles)
+            throws IOException, InterruptedException, NoSuchMethodException {
         StringBuilder response = new StringBuilder();
         String report = null;
-        if (problemFiles.containsKey(Path.of("tracer.js"))) {
+        if (problemFiles.containsKey(java.nio.file.Path.of("tracer.js"))) {
             codeCheck.saveProblem("ext", problem, problemFiles);
         } else {
             report = codeCheck.checkAndSave(problem, problemFiles);
@@ -183,71 +184,31 @@ public class Upload {
         response.append(
                 "<html><head><title></title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/>");
         response.append("<body style=\"font-family: sans-serif\">");
-
-        String prefix = models.Util.prefix(request) + "/";
-        String problemUrl = createProblemUrl(request, problem, problemFiles);
-        response.append("Public URL (for your students): ");
-        response.append("<a href=\"" + problemUrl + "\" target=\"_blank\">" + problemUrl + "</a>");
-        Path editKeyPath = Path.of("edit.key");
-        if (problemFiles.containsKey(editKeyPath)) {
-            String editKey = new String(problemFiles.get(editKeyPath), StandardCharsets.UTF_8);
-            String editURL = prefix + "private/problem/" + problem + "/" + editKey;
-            response.append("<br/>Edit URL (for you only): ");
-            response.append("<a href=\"" + editURL + "\">" + editURL + "</a>");
-        }
         if (report != null) {
-            String run = Base64.getEncoder().encodeToString(report.getBytes(StandardCharsets.UTF_8));
-            response.append(
-                    "<br/><iframe height=\"400\" style=\"width: 90%; margin: 2em;\" src=\"data:text/html;base64," + run
-                            + "\"></iframe>");
+            response.append("<pre>");
+            response.append(report);
+            response.append("</pre>");
+        } else {
+            response.append("<p>Upload of problem ").append(problem).append(" was successful.</p>");
         }
-        response.append("</li>\n");
-        response.append("</ul><p></body></html>\n");
+        response.append("</body></html>");
         return response.toString();
     }
 
-    private String createProblemUrl(HttpServletRequest request, String problem, Map<Path, byte[]> problemFiles) {
-        String type;
-        if (problemFiles.containsKey(Path.of("tracer.js"))) {
-            type = "tracer";
-        } else {
-            type = "files";
-        }
-        String prefix = models.Util.prefix(request) + "/";
-        String problemUrl = prefix + type + "/" + problem;
-        return problemUrl;
-    }
-
-    private static Path longestCommonPrefix(Path p, Path q) {
-        if (p == null || q == null) return null;
-        int i = 0;
-        boolean matching = true;
-        while (matching && i < Math.min(p.getNameCount(), q.getNameCount())) {
-            if (p.getName(i).equals(q.getName(i))) i++;
-            else matching = false;
-        }
-        return i == 0 ? null : p.subpath(0, i);
-    }
-
-    private static Map<Path, byte[]> fixZip(Map<Path, byte[]> problemFiles) throws IOException {
-        Path r = null;
-        boolean first = true;
-        for (Path p : problemFiles.keySet()) {
-            if (first) {
-                r = p;
-                first = false;
-            } else r = longestCommonPrefix(r, p);
-        }
-        if (r == null) return problemFiles;
-        Map<Path, byte[]> fixedProblemFiles = new TreeMap<>();
-        if (problemFiles.keySet().size() == 1) {
-            fixedProblemFiles.put(r.getFileName(), problemFiles.get(r));
-        } else {
-            for (Map.Entry<Path, byte[]> entry : problemFiles.entrySet()) {
-                fixedProblemFiles.put(r.relativize(entry.getKey()), entry.getValue());
+    private Map<java.nio.file.Path, byte[]> fixZip(Map<java.nio.file.Path, byte[]> problemFiles) {
+        Map<java.nio.file.Path, byte[]> result = new TreeMap<>();
+        for (Map.Entry<java.nio.file.Path, byte[]> entry : problemFiles.entrySet()) {
+            java.nio.file.Path path = entry.getKey();
+            byte[] contents = entry.getValue();
+            if (path.getNameCount() > 1 && path.getName(0).toString().equals("_inputs")) {
+                path = path.subpath(1, path.getNameCount());
             }
+            result.put(path, contents);
         }
+        return result;
+    }
 
-        return fixedProblemFiles;
+    private String createProblemUrl(String request, String problem, Map<java.nio.file.Path, byte[]> problemFiles) {
+        return request;
     }
 }
