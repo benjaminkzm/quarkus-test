@@ -23,7 +23,6 @@ import javax.script.ScriptEngine;
 import javax.script.ScriptEngineManager;
 import javax.script.ScriptException;
 
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,12 +43,6 @@ public class CodeCheck {
     private JarSigner signer;
     private final ResourceLoader resourceLoader;
 
-    @ConfigProperty(name = "com.horstmann.codecheck.storeLocation")
-    String keyStorePath;
-
-    @ConfigProperty(name = "com.horstmann.codecheck.storePassword")
-    String storePassword;
-
     @Inject
     public CodeCheck(ProblemConnector probConn) {
         this.probConn = probConn;
@@ -58,13 +51,16 @@ public class CodeCheck {
             public InputStream loadResource(String path) throws IOException {
                 return Thread.currentThread().getContextClassLoader().getResourceAsStream("public/resources/" + path);
             }
+
             @Override
             public String getProperty(String key) {
-                return System.getProperty(key); 
+                return System.getProperty(key);
             }
         };
 
         try {
+            String keyStorePath = Config.getString("com.horstmann.codecheck.storeLocation");
+            String storePassword = Config.getString("com.horstmann.codecheck.storePassword");
             char[] password = storePassword.toCharArray();
             KeyStore ks = KeyStore.getInstance(new File(keyStorePath), password);
             KeyStore.ProtectionParameter protParam = new KeyStore.PasswordProtection(password);

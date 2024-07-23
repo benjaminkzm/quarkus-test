@@ -82,6 +82,20 @@
             <scope>provided</scope>
         </dependency>
 
+        <!--Quarkus http servlet -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-undertow</artifactId>
+            <version>3.12.2</version>
+        </dependency>
+
+        <!--quarkus-resteasy-multipart-->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-resteasy-multipart</artifactId>
+            <version>3.12.2</version>
+        </dependency>
+
         <!-- Test dependencies -->
         <dependency>
             <groupId>io.quarkus</groupId>
