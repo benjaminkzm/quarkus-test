@@ -2,21 +2,31 @@ package controllers;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.TreeMap;
 
+import javax.script.ScriptException;
+
+import org.jboss.resteasy.reactive.RestForm;
+import org.jboss.resteasy.reactive.multipart.FileUpload;
+
+import com.horstmann.codecheck.Util;
+
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.inject.Inject;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.ws.rs.*;
-import jakarta.ws.rs.core.*;
-
-import com.horstmann.codecheck.Util;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.FormParam;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import models.CodeCheck;
 import views.EditHTML;
-import org.jboss.resteasy.reactive.MultipartForm;
-import org.jboss.resteasy.reactive.RestForm;
 
 @RequestScoped
 @jakarta.ws.rs.Path("/upload")
@@ -89,8 +99,8 @@ public class Upload {
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     @Produces(MediaType.TEXT_HTML)
     public Response uploadProblem(@RestForm("request") String request,
-                                  @MultipartForm FileUploadForm form) {
-        return uploadProblem(request, com.horstmann.codecheck.Util.createPublicUID(), Util.createPrivateUID(), form);
+                                  @RestForm("problem") FileUpload fileUpload) {
+        return uploadProblem(request, com.horstmann.codecheck.Util.createPublicUID(), Util.createPrivateUID(), fileUpload);
     }
 
     @POST
@@ -100,10 +110,10 @@ public class Upload {
     public Response editedProblem(@RestForm("request") String request,
                                   @PathParam("problem") String problem,
                                   @PathParam("editKey") String editKey,
-                                  @MultipartForm FileUploadForm form) {
+                                  @RestForm("problem") FileUpload fileUpload) {
         try {
             if (checkEditKey(problem, editKey))
-                return uploadProblem(request, problem, editKey, form);
+                return uploadProblem(request, problem, editKey, fileUpload);
             else
                 return Response.status(Response.Status.BAD_REQUEST)
                                .entity("Wrong edit key " + editKey + " of problem " + problem).build();
@@ -123,11 +133,11 @@ public class Upload {
     public Response uploadProblem(@RestForm("request") String request,
                                   @PathParam("problem") String problem,
                                   @PathParam("editKey") String editKey,
-                                  @MultipartForm FileUploadForm form) {
+                                  @RestForm("problem") FileUpload fileUpload) {
         try {
             if (problem == null)
                 return Response.status(Response.Status.BAD_REQUEST).entity("No problem id").build();
-            byte[] contents = Util.readAllBytes(form.file);
+            byte[] contents = Files.readAllBytes(fileUpload.uploadedFile());
             Map<Path, byte[]> problemFiles = Util.unzip(contents);
             problemFiles = fixZip(problemFiles);
             Path editKeyPath = Path.of("edit.key");
@@ -186,7 +196,7 @@ public class Upload {
     }
 
     private String checkAndSaveProblem(String request, String problem, Map<Path, byte[]> problemFiles)
-            throws IOException, InterruptedException, NoSuchMethodException {
+            throws IOException, InterruptedException, NoSuchMethodException, ScriptException {
         StringBuilder response = new StringBuilder();
         String report = null;
         if (problemFiles.containsKey(Path.of("tracer.js"))) {
@@ -203,6 +213,7 @@ public class Upload {
         } else {
             response.append("<p>Upload of problem ").append(problem).append(" was successful.</p>");
         }
+        response.append("<p><a href=\"").append(request).append("\">Go back</a></p>");
         response.append("</body></html>");
         return response.toString();
     }
