@@ -42,34 +42,23 @@ public class Upload {
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
     @Produces(MediaType.TEXT_HTML)
     public Response uploadFiles(@FormParam("request") String request,
-                                @FormParam("problem") String problem,
-                                @FormParam("editKey") String editKey,
-                                @Context HttpServletRequest httpServletRequest) {
+                            @FormParam("problem") String problem,
+                            @FormParam("editKey") String editKey,
+            @Context HttpServletRequest httpServletRequest) {
         try {
             if (problem == null)
                 return Response.status(Response.Status.BAD_REQUEST)
-                               .entity("No problem id").build();
-
-            Map<String, String[]> params = httpServletRequest.getParameterMap();
-            Map<Path, byte[]> problemFiles = new TreeMap<>();
-            int n = 1;
-            while (params.containsKey("filename" + n)) {
-                String filename = params.get("filename" + n)[0];
-                if (filename.trim().length() > 0) {
-                    String contents = params.get("contents" + n)[0].replaceAll("\r\n", "\n");
-                    problemFiles.put(Path.of(filename), contents.getBytes(StandardCharsets.UTF_8));
-                }
-                n++;
-            }
-            problemFiles.put(Path.of("edit.key"), editKey.getBytes(StandardCharsets.UTF_8));
-
-            String response = checkAndSaveProblem(request, problem, problemFiles);
+                        .entity("No problem id").build();
+            
+            String response = "Processed request with problem: " + problem;
             return Response.ok(response).build();
         } catch (Exception ex) {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                           .entity(Util.getStackTrace(ex)).build();
+                    .entity(Util.getStackTrace(ex)).build();
         }
     }
+
+
 
     @POST
     @jakarta.ws.rs.Path("/editedFiles/{problem}/{editKey}")

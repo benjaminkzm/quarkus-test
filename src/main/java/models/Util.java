@@ -2,14 +2,14 @@ package models;
 
 import java.time.Duration;
 
-import javax.ws.rs.core.HttpHeaders;
-import javax.ws.rs.core.NewCookie;
-import javax.ws.rs.core.UriInfo;
-
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.NewCookie;
+import jakarta.ws.rs.core.UriInfo;
 
 public class Util {
 
@@ -39,20 +39,15 @@ public class Util {
     }
 
     public static NewCookie buildCookie(String name, String value) {
-        String path = "/";
         int maxAge = (int) Duration.ofDays(180).getSeconds();
-        boolean httpOnly = true;
-        boolean secure = false;
-        String sameSite = "Strict";
-
-        String cookieValue = value + "; Max-Age=" + maxAge + "; Path=" + path + "; SameSite=" + sameSite;
-        if (secure) {
-            cookieValue += "; Secure";
-        }
-        if (httpOnly) {
-            cookieValue += "; HttpOnly";
-        }
-
-        return new NewCookie(name, cookieValue, path, null, null, maxAge, secure);
+        
+        return new NewCookie.Builder(name)
+                .value(value)
+                .path("/")
+                .maxAge(maxAge)
+                .httpOnly(true)
+                .secure(false)
+                .sameSite(NewCookie.SameSite.STRICT)
+                .build();
     }
 }

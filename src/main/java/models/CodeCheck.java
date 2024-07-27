@@ -17,7 +17,6 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
-import javax.inject.Inject;
 import javax.script.Invocable;
 import javax.script.ScriptEngine;
 import javax.script.ScriptEngineManager;
@@ -33,6 +32,7 @@ import com.horstmann.codecheck.ResourceLoader;
 import com.horstmann.codecheck.Util;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jdk.security.jarsigner.JarSigner;
 
 @ApplicationScoped

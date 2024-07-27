@@ -35,67 +35,35 @@
         <!-- Quarkus dependencies -->
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-resteasy</artifactId>
+            <artifactId>quarkus-resteasy-reactive</artifactId>
+            <version>${quarkus.platform.version}</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-resteasy-jackson</artifactId>
+            <artifactId>quarkus-resteasy-reactive-jackson</artifactId>
+            <version>${quarkus.platform.version}</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-context-propagation</artifactId>
+            <version>${quarkus.platform.version}</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-arc</artifactId>
+            <version>${quarkus.platform.version}</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-config-yaml</artifactId>
+            <version>${quarkus.platform.version}</version>
         </dependency>
-
-        <!-- javax.inject dependencies -->
-        <dependency>
-            <groupId>javax.inject</groupId>
-            <artifactId>javax.inject</artifactId>
-            <version>1</version>
-        </dependency>
-
-        <!-- Quarkus RESTEasy Reactive dependencies -->
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-resteasy-reactive</artifactId>
-            <version>3.8.5</version>
-        </dependency>
-
-        <!-- Quarkus RESTEasy Reactive Jackson dependency (if working with JSON) -->
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-resteasy-reactive-jackson</artifactId>
-        </dependency>        
-
-        <!-- javax.ws.rs dependencies -->
-        <dependency>
-            <groupId>javax.ws.rs</groupId>
-            <artifactId>javax.ws.rs-api</artifactId>
-            <version>2.1.1</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <!--Quarkus http servlet -->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-undertow</artifactId>
-            <version>3.12.2</version>
+            <version>${quarkus.platform.version}</version>
         </dependency>
-
-        <!--quarkus-resteasy-multipart-->
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-resteasy-multipart</artifactId>
-            <version>3.12.2</version>
-        </dependency>
-
+        
         <!-- Test dependencies -->
         <dependency>
             <groupId>io.quarkus</groupId>
