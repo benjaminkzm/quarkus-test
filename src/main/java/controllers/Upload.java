@@ -9,6 +9,7 @@ import java.util.TreeMap;
 
 import javax.script.ScriptException;
 
+import org.apache.commons.text.StringEscapeUtils;
 import org.jboss.resteasy.reactive.RestForm;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
 
@@ -17,14 +18,14 @@ import com.horstmann.codecheck.Util;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.FormParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
-import models.CodeCheck;
+import models.CodeCheck; // Import for escaping HTML
 
 @RequestScoped
 @jakarta.ws.rs.Path("/")
@@ -39,28 +40,25 @@ public class Upload {
     @jakarta.ws.rs.Path("/uploadFiles")
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
     @Produces(MediaType.TEXT_HTML)
-    public Response uploadFiles(@jakarta.ws.rs.core.Context UriInfo uriInfo) {
-        MultivaluedMap<String, String> formParams = uriInfo.getQueryParameters();
-        String problem = Util.createPublicUID();
-        String editKey = Util.createPrivateUID();
-
-        if (problem == null || problem.isEmpty()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("No problem id").build();
-        }
-
-        return uploadFiles(formParams, problem, editKey);
-    }
-
-    public Response uploadFiles(MultivaluedMap<String, String> formParams,
-                                String problem,
-                                String editKey) {
+    public Response uploadFiles(@FormParam("filename1") String filename1,
+                                @FormParam("contents1") String contents1,
+                                @FormParam("filename2") String filename2,
+                                @FormParam("contents2") String contents2,
+                                // Add additional FormParam annotations as needed
+                                @jakarta.ws.rs.core.Context UriInfo uriInfo) {
         try {
-            String response = "Processed request with problem: " + problem;
-            for (Map.Entry<String, java.util.List<String>> e : formParams.entrySet()) {
-                response += "\n" + e.getKey() + "->" + e.getValue();
+            StringBuilder response = new StringBuilder("Processed request with problem: ");
+            response.append(Util.createPublicUID());
+
+            response.append("<br>Filename 1: ").append(StringEscapeUtils.escapeHtml4(filename1));
+            response.append("<br>Contents 1: <pre>").append(StringEscapeUtils.escapeHtml4(contents1)).append("</pre>");
+            if (filename2 != null && contents2 != null) {
+                response.append("<br>Filename 2: ").append(StringEscapeUtils.escapeHtml4(filename2));
+                response.append("<br>Contents 2: <pre>").append(StringEscapeUtils.escapeHtml4(contents2)).append("</pre>");
             }
-            return Response.ok(response).build();
+            // Handle additional file names and contents here
+
+            return Response.ok(response.toString()).build();
         } catch (Exception ex) {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                     .entity(Util.getStackTrace(ex)).build();
