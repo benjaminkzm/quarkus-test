@@ -22,6 +22,7 @@ import jakarta.ws.rs.FormParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
@@ -69,8 +70,13 @@ public class Upload {
     @jakarta.ws.rs.Path("/uploadProblem")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     @Produces(MediaType.TEXT_HTML)
-    public Response uploadProblem(@RestForm("problem") FileUpload fileUpload) {
-        return uploadProblem(Util.createPublicUID(), Util.createPrivateUID(), fileUpload);
+    public Response uploadProblem(@RestForm("problem") FileUpload fileUpload,
+                                  @jakarta.ws.rs.core.Context UriInfo uriInfo,
+                                  @jakarta.ws.rs.core.Context HttpHeaders headers) {
+                if (fileUpload == null) {
+                    return Response.status(Response.Status.BAD_REQUEST).entity("File upload parameter is missing").build();
+                }
+        return uploadProblem(Util.createPublicUID(), Util.createPrivateUID(), fileUpload, uriInfo, headers);
     }
 
     @POST
@@ -79,7 +85,9 @@ public class Upload {
     @Produces(MediaType.TEXT_HTML)
     public Response uploadProblem(@PathParam("problem") String problem,
                                   @PathParam("editKey") String editKey,
-                                  @RestForm("problem") FileUpload fileUpload) {
+                                  @RestForm("problem") FileUpload fileUpload,
+                                  @jakarta.ws.rs.core.Context UriInfo uriInfo,
+                                  @jakarta.ws.rs.core.Context HttpHeaders headers) {
         try {
             if (problem == null || problem.isEmpty())
                 return Response.status(Response.Status.BAD_REQUEST).entity("No problem id").build();
@@ -90,6 +98,12 @@ public class Upload {
             if (!problemFiles.containsKey(editKeyPath))
                 problemFiles.put(editKeyPath, editKey.getBytes(StandardCharsets.UTF_8));
             String response = checkAndSaveProblem(problem, problemFiles);
+            
+            // Generate the problem URL
+            String problemUrl = createProblemUrl(uriInfo, headers, problem, problemFiles);
+            
+            response += "<br><a href=\"" + problemUrl + "\">View Problem</a>";
+            
             return Response.ok(response).type(MediaType.TEXT_HTML).build();
         } catch (Exception ex) {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(Util.getStackTrace(ex)).build();
@@ -130,5 +144,18 @@ public class Upload {
             result.put(path, contents);
         }
         return result;
+    }
+
+    // Method to create a problem URL based on the request and problem files
+    private String createProblemUrl(UriInfo uriInfo, HttpHeaders headers, String problem, Map<Path, byte[]> problemFiles) {
+        String type;
+        if (problemFiles.containsKey(Path.of("tracer.js"))) {
+            type = "tracer";
+        } else {
+            type = "files";
+        }
+        String prefix = models.Util.prefix(uriInfo, headers) + "/";
+        String problemUrl = prefix + type + "/" + problem;
+        return problemUrl;
     }
 }
