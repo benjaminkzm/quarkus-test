@@ -1,34 +1,14 @@
 package controllers;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Base64;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.stream.Collectors;
-
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.FormParam;
-import jakarta.ws.rs.POST;
-import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.core.Context;
-import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.UriInfo;
-
-import org.jboss.resteasy.reactive.RestForm;
-import org.jboss.resteasy.reactive.multipart.FileUpload;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +16,16 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.horstmann.codecheck.Util;
 
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 import models.CodeCheck;
 
 @ApplicationScoped
@@ -49,39 +39,35 @@ public class Check {
 
     @POST
     @jakarta.ws.rs.Path("/checkHTML")
-    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+    @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.TEXT_HTML)
     public CompletableFuture<Response> checkHTML(
             @Context UriInfo uriInfo,
             @Context HttpHeaders headers,
-            @FormParam("repo") String repo,
-            @FormParam("problem") String problem,
-            @FormParam("ccid") String ccid,
-            @RestForm String description,
-            @RestForm FileUpload file) {
+            JsonNode payload) {
 
         return CompletableFuture.supplyAsync(() -> {
-            String localCcid = (ccid != null) ? ccid : Util.createPronouncableUID();
+            String repo = Optional.ofNullable(payload.get("repo")).map(JsonNode::asText).orElse(null);
+            String problem = Optional.ofNullable(payload.get("problem")).map(JsonNode::asText).orElse(null);
+            String ccid = Optional.ofNullable(payload.get("ccid")).map(JsonNode::asText).orElse(Util.createPronouncableUID());
             long startTime = System.nanoTime();
             Map<Path, String> submissionFiles = new TreeMap<>();
-            if (file != null) {
-                try {
-                    String contents = new String(file.get().readAllBytes(), StandardCharsets.UTF_8);
-                    Path filePath = Paths.get("uploaded-file");
-                    submissionFiles.put(filePath, contents);
-                } catch (Exception e) {
-                    return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity("File read error").build();
-                }
+            
+            if (payload.has("file")) {
+                String base64File = payload.get("file").asText();
+                byte[] fileBytes = Base64.getDecoder().decode(base64File);
+                Path filePath = Paths.get("uploaded-file");
+                submissionFiles.put(filePath, new String(fileBytes));
             }
 
             try {
-                String report = codeCheck.run("html", repo, problem, localCcid, submissionFiles);
+                String report = codeCheck.run("html", repo, problem, ccid, submissionFiles);
                 double elapsed = (System.nanoTime() - startTime) / 1000000000.0;
                 if (report == null || report.isEmpty()) {
                     report = String.format("Timed out after %5.0f seconds\n", elapsed);
                 }
 
-                return Response.ok(report).header("Set-Cookie", "ccid=" + localCcid + "; Path=/").build();
+                return Response.ok(report).header("Set-Cookie", "ccid=" + ccid + "; Path=/").build();
             } catch (Exception ex) {
                 return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(Util.getStackTrace(ex)).build();
             }
@@ -90,31 +76,22 @@ public class Check {
 
     @POST
     @jakarta.ws.rs.Path("/run")
-    @Consumes({ MediaType.APPLICATION_FORM_URLENCODED, MediaType.MULTIPART_FORM_DATA, MediaType.APPLICATION_JSON })
+    @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.TEXT_PLAIN)
     public CompletableFuture<Response> run(
             @Context UriInfo uriInfo,
             @Context HttpHeaders headers,
-            @RestForm String description,
-            @RestForm FileUpload file,
-            @RestForm JsonNode json) {
+            JsonNode payload) {
 
         return CompletableFuture.supplyAsync(() -> {
             Map<Path, String> submissionFiles = new TreeMap<>();
-            String contentType = headers.getHeaderString("Content-Type");
-
+            
             try {
-                if (MediaType.MULTIPART_FORM_DATA.equals(contentType) && file != null) {
-                    String contents = new String(file.get().readAllBytes(), StandardCharsets.UTF_8);
+                if (payload.has("file")) {
+                    String base64File = payload.get("file").asText();
+                    byte[] fileBytes = Base64.getDecoder().decode(base64File);
                     Path filePath = Paths.get("uploaded-file");
-                    submissionFiles.put(filePath, contents);
-                } else if (MediaType.APPLICATION_JSON.equals(contentType) && json != null) {
-                    Iterator<Entry<String, JsonNode>> iter = json.fields();
-                    while (iter.hasNext()) {
-                        Entry<String, JsonNode> entry = iter.next();
-                        Path filePath = Paths.get(entry.getKey());
-                        submissionFiles.put(filePath, entry.getValue().asText());
-                    }
+                    submissionFiles.put(filePath, new String(fileBytes));
                 }
 
                 long startTime = System.nanoTime();
@@ -133,28 +110,20 @@ public class Check {
 
     @POST
     @jakarta.ws.rs.Path("/checkNJS")
-    @Consumes({ MediaType.APPLICATION_FORM_URLENCODED, MediaType.APPLICATION_JSON })
+    @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public CompletableFuture<Response> checkNJS(
             @Context UriInfo uriInfo,
             @Context HttpHeaders headers,
-            @RestForm JsonNode json) {
+            JsonNode payload) {
 
         return CompletableFuture.supplyAsync(() -> {
-            Map<String, String[]> params = new HashMap<>();
+            Map<String, String[]> params = new TreeMap<>();
             try {
-                if (headers.getHeaderString("Content-Type") == null || MediaType.APPLICATION_FORM_URLENCODED.equals(headers.getHeaderString("Content-Type"))) {
-                    params = uriInfo.getQueryParameters().entrySet().stream()
-                            .collect(Collectors.toMap(
-                                    Map.Entry::getKey,
-                                    e -> e.getValue().toArray(new String[0])
-                            ));
-                } else if (MediaType.APPLICATION_JSON.equals(headers.getHeaderString("Content-Type")) && json != null) {
-                    Iterator<Entry<String, JsonNode>> iter = json.fields();
-                    while (iter.hasNext()) {
-                        Entry<String, JsonNode> entry = iter.next();
+                if (payload != null) {
+                    payload.fields().forEachRemaining(entry -> {
                         params.put(entry.getKey(), new String[]{entry.getValue().asText()});
-                    }
+                    });
                 }
 
                 String ccid = Optional.ofNullable(params.get("ccid")).map(v -> v[0]).orElse(Util.createPronouncableUID());
@@ -212,5 +181,4 @@ public class Check {
             }
         }, executor);
     }
-
 }
