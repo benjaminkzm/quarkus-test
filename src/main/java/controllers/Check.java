@@ -10,6 +10,8 @@ import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
@@ -29,6 +31,7 @@ import jakarta.ws.rs.core.UriInfo;
 import models.CodeCheck;
 
 @ApplicationScoped
+@jakarta.ws.rs.Path("/check")
 public class Check {
 
     @Inject
@@ -36,6 +39,34 @@ public class Check {
 
     @Inject
     Executor executor;
+
+    @Inject
+    @ConfigProperty(name = "checkHTML.url")
+    String checkHTMLUrl;
+
+    @Inject
+    @ConfigProperty(name = "checkHTML.Content-Type")
+    String htmlContentType;
+
+    @Inject
+    @ConfigProperty(name = "checkHTML.Input")
+    String htmlInput;
+
+    @Inject
+    @ConfigProperty(name = "checkHTML.Main.java")
+    String htmlMainJava;
+
+    @Inject
+    @ConfigProperty(name = "checkHTML.problem")
+    String htmlProblem;
+
+    @Inject
+    @ConfigProperty(name = "checkHTML.repo")
+    String htmlRepo;
+
+    @Inject
+    @ConfigProperty(name = "com.horstmann.codecheck.s3.local")
+    String s3Local;
 
     @POST
     @jakarta.ws.rs.Path("/checkHTML")
@@ -47,29 +78,49 @@ public class Check {
             JsonNode payload) {
 
         return CompletableFuture.supplyAsync(() -> {
-            String repo = Optional.ofNullable(payload.get("repo")).map(JsonNode::asText).orElse(null);
-            String problem = Optional.ofNullable(payload.get("problem")).map(JsonNode::asText).orElse(null);
-            String ccid = Optional.ofNullable(payload.get("ccid")).map(JsonNode::asText).orElse(Util.createPronouncableUID());
-            long startTime = System.nanoTime();
-            Map<Path, String> submissionFiles = new TreeMap<>();
-            
-            if (payload.has("file")) {
-                String base64File = payload.get("file").asText();
-                byte[] fileBytes = Base64.getDecoder().decode(base64File);
-                Path filePath = Paths.get("uploaded-file");
-                submissionFiles.put(filePath, new String(fileBytes));
-            }
-
             try {
+                String repo = Optional.ofNullable(payload.get("repo")).map(JsonNode::asText).orElse(htmlRepo);
+                String problem = Optional.ofNullable(payload.get("problem")).map(JsonNode::asText).orElse(htmlProblem);
+                String ccid = Optional.ofNullable(payload.get("ccid")).map(JsonNode::asText).orElse(Util.createPronouncableUID());
+                long startTime = System.nanoTime();
+                Map<Path, String> submissionFiles = new TreeMap<>();
+                
+                if (payload.has("file")) {
+                    String base64File = payload.get("file").asText();
+                    byte[] fileBytes = Base64.getDecoder().decode(base64File);
+                    Path filePath = Paths.get("uploaded-file");
+                    submissionFiles.put(filePath, new String(fileBytes));
+                }
+
                 String report = codeCheck.run("html", repo, problem, ccid, submissionFiles);
-                double elapsed = (System.nanoTime() - startTime) / 1000000000.0;
+                double elapsed = (System.nanoTime() - startTime) / 1_000_000_000.0;
                 if (report == null || report.isEmpty()) {
                     report = String.format("Timed out after %5.0f seconds\n", elapsed);
                 }
 
-                return Response.ok(report).header("Set-Cookie", "ccid=" + ccid + "; Path=/").build();
+                String htmlResponse = String.format("""
+                                                    <body>
+                                                    <p class="header run">Output</p>
+                                                    <pre class="output">%s</pre>
+                                                    </body>""",
+                    report
+                );
+
+                return Response.ok(htmlResponse, MediaType.TEXT_HTML)
+                        .header("Set-Cookie", "ccid=" + ccid + "; Path=/")
+                        .build();
             } catch (Exception ex) {
-                return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(Util.getStackTrace(ex)).build();
+                String errorHtml = String.format("""
+                                                 <body>
+                                                 <p class="header run">Error</p>
+                                                 <pre class="output">%s</pre>
+                                                 </body>""",
+                    Util.getStackTrace(ex)
+                );
+                return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                        .entity(errorHtml)
+                        .type(MediaType.TEXT_HTML)
+                        .build();
             }
         }, executor);
     }
@@ -84,9 +135,9 @@ public class Check {
             JsonNode payload) {
 
         return CompletableFuture.supplyAsync(() -> {
-            Map<Path, String> submissionFiles = new TreeMap<>();
-            
             try {
+                Map<Path, String> submissionFiles = new TreeMap<>();
+                
                 if (payload.has("file")) {
                     String base64File = payload.get("file").asText();
                     byte[] fileBytes = Base64.getDecoder().decode(base64File);
@@ -96,7 +147,7 @@ public class Check {
 
                 long startTime = System.nanoTime();
                 String report = codeCheck.run("Text", submissionFiles);
-                double elapsed = (System.nanoTime() - startTime) / 1000000000.0;
+                double elapsed = (System.nanoTime() - startTime) / 1_000_000_000.0;
                 if (report == null || report.isEmpty()) {
                     report = String.format("Timed out after %5.0f seconds\n", elapsed);
                 }
@@ -118,8 +169,8 @@ public class Check {
             JsonNode payload) {
 
         return CompletableFuture.supplyAsync(() -> {
-            Map<String, String[]> params = new TreeMap<>();
             try {
+                Map<String, String[]> params = new TreeMap<>();
                 if (payload != null) {
                     payload.fields().forEachRemaining(entry -> {
                         params.put(entry.getKey(), new String[]{entry.getValue().asText()});
