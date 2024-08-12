@@ -31,6 +31,7 @@ import com.horstmann.codecheck.Problem;
 import com.horstmann.codecheck.ResourceLoader;
 import com.horstmann.codecheck.Util;
 
+import controllers.Config;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jdk.security.jarsigner.JarSigner;
@@ -40,12 +41,14 @@ public class CodeCheck {
     private static final Logger logger = LoggerFactory.getLogger(CodeCheck.class);
 
     private final ProblemConnector probConn;
+    private final Config config;
     private JarSigner signer;
     private final ResourceLoader resourceLoader;
 
     @Inject
-    public CodeCheck(ProblemConnector probConn) {
+    public CodeCheck(ProblemConnector probConn, Config config) {
         this.probConn = probConn;
+        this.config = config; // Assign injected Config instance
         this.resourceLoader = new ResourceLoader() {
             @Override
             public InputStream loadResource(String path) throws IOException {
@@ -59,8 +62,8 @@ public class CodeCheck {
         };
 
         try {
-            String keyStorePath = Config.getString("com.horstmann.codecheck.storeLocation");
-            String storePassword = Config.getString("com.horstmann.codecheck.storePassword");
+            String keyStorePath = config.getString("com.horstmann.codecheck.storeLocation");
+            String storePassword = config.getString("com.horstmann.codecheck.storePassword");
             char[] password = storePassword.toCharArray();
             KeyStore ks = KeyStore.getInstance(new File(keyStorePath), password);
             KeyStore.ProtectionParameter protParam = new KeyStore.PasswordProtection(password);
@@ -218,8 +221,9 @@ public class CodeCheck {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (ZipFile in = new ZipFile(tempFile.toFile())) {
             signer.sign(in, out);
+        } finally {
+            Files.delete(tempFile);
         }
-        Files.delete(tempFile);
         return out.toByteArray();
     }
 }

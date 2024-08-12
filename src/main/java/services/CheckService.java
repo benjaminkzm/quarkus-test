@@ -17,9 +17,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import models.CodeCheck;
 
+@ApplicationScoped
 public class CheckService {
     @Inject private CodeCheck codeCheck;
     private ObjectMapper mapper = new ObjectMapper();
@@ -53,7 +55,7 @@ public class CheckService {
         while (iter.hasNext()) {
             Entry<String, JsonNode> entry = iter.next();
             submissionFiles.put(Paths.get(entry.getKey()), entry.getValue().asText());         
-        };
+        }
         String report = codeCheck.run("JSON", submissionFiles);
         return (ObjectNode) mapper.readTree(report);
     }

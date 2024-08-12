@@ -2,21 +2,26 @@ package controllers;
 
 import java.io.IOException;
 import java.io.InputStream;
-
-import org.eclipse.microprofile.config.ConfigProvider;
+import java.util.Optional;
 
 import com.horstmann.codecheck.ResourceLoader;
 
-import jakarta.inject.Singleton;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
-@Singleton
+@ApplicationScoped
 public class Config implements ResourceLoader {
 
-    private final org.eclipse.microprofile.config.Config config = ConfigProvider.getConfig();
+    private final Config config;
+
+    @Inject
+    public Config(Config config) {
+        this.config = config;
+    }
 
     @Override
     public InputStream loadResource(String path) throws IOException {
-        InputStream inputStream = Thread.currentThread().getContextClassLoader().getResourceAsStream(path);
+        InputStream inputStream = Thread.currentThread().getContextClassLoader().getResourceAsStream("resources/" + path);
         if (inputStream == null) {
             throw new IOException("Resource not found: " + path);
         }
@@ -25,6 +30,18 @@ public class Config implements ResourceLoader {
 
     @Override
     public String getProperty(String key) {
-        return config.getOptionalValue(key, String.class).orElse(null);
+        return getString(key);
+    }
+
+    public <T> Optional<T> getOptionalValue(String key, Class<T> type) {
+        return config.getOptionalValue(key, type);
+    }
+
+    public String getString(String key) {
+        return getOptionalValue(key, String.class).orElse(null);
+    }
+
+    public boolean hasPath(String key) {
+        return getOptionalValue(key, String.class).isPresent();
     }
 }
