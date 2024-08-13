@@ -1,16 +1,5 @@
 package controllers;
 
-import java.io.IOException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Optional;
-import java.util.TreeMap;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -23,10 +12,28 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
+import jakarta.ws.rs.core.MultivaluedMap;
+
 import services.CheckService;
+import models.MultipartFormData;
+import org.jboss.resteasy.plugins.providers.multipart.MultipartFormDataInput;
+import org.jboss.resteasy.plugins.providers.multipart.FormDataContentDisposition;
+import org.jboss.resteasy.plugins.providers.multipart.InputPart;
+
+import java.io.InputStream;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Iterator;
+import java.util.List;
+import java.io.IOException;
+import java.util.Map;
+import java.util.Optional;
+import java.util.TreeMap;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @ApplicationScoped
 @jakarta.ws.rs.Path("/check")
@@ -83,35 +90,53 @@ public class Check {
     @POST
     @jakarta.ws.rs.Path("/run")
     @Consumes({ MediaType.APPLICATION_FORM_URLENCODED, MediaType.MULTIPART_FORM_DATA, MediaType.APPLICATION_JSON })
-    public CompletableFuture<Response> run() throws IOException, InterruptedException {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                Map<Path, String> submissionFiles = new TreeMap<>();
-                String contentType = headers.getHeaderString(HttpHeaders.CONTENT_TYPE);
+    public Response run(MultipartFormDataInput input) {
+        try {
+            String contentType = headers.getHeaderString(HttpHeaders.CONTENT_TYPE);
+            Map<Path, String> submissionFiles = new TreeMap<>();
 
-                if (MediaType.APPLICATION_FORM_URLENCODED.equals(contentType)) {
-                    MultivaluedMap<String, String> params = uriInfo.getQueryParameters();
-                    for (String key : params.keySet()) {
-                        String value = params.getFirst(key);
+            if (MediaType.APPLICATION_FORM_URLENCODED.equals(contentType)) {
+                // Form-urlencoded processing
+                Map<String, List<InputPart>> formData = input.getFormDataMap();
+                List<InputPart> params = formData.get("params"); // Retrieve form fields
+                if (params != null) {
+                    for (InputPart inputPart : params) {
+                        String key = "unknown"; // Default key or handle differently
+                        String value = inputPart.getBodyAsString(); // Get form field value
                         submissionFiles.put(Paths.get(key), value);
                     }
-                    return Response.ok(checkService.run(submissionFiles)).type(MediaType.TEXT_PLAIN).build();
-                } else if (MediaType.MULTIPART_FORM_DATA.equals(contentType)) {
-                    // Handle multipart form data
-                    // Note: Handling multipart form data in Jakarta EE might require a different approach,
-                    // such as using @MultipartForm or handling file uploads explicitly.
-                    return Response.ok().build(); // Placeholder
-                } else if (MediaType.APPLICATION_JSON.equals(contentType)) {
-                    String jsonString = uriInfo.getQueryParameters().getFirst("jsonBody"); // Get JSON string from query parameter
-                    JsonNode json = objectMapper.readTree(jsonString); // Parse JSON string to JsonNode
-                    return Response.ok(checkService.runJSON(json)).type(MediaType.APPLICATION_JSON).build();
-                } else {
-                    return Response.serverError().entity("Bad content type").build();
                 }
-            } catch (Exception ex) {
-                return Response.serverError().entity(Util.getStackTrace(ex)).build();
+                return Response.ok(checkService.run(submissionFiles)).type(MediaType.TEXT_PLAIN).build();
+
+            } else if (MediaType.MULTIPART_FORM_DATA.equals(contentType)) {
+                // Process multipart form data
+                Map<String, List<InputPart>> formData = input.getFormDataMap();
+                
+                // Process files
+                List<InputPart> fileParts = formData.get("file"); // Get files part
+                if (fileParts != null) {
+                    for (InputPart inputPart : fileParts) {
+                        InputStream inputStream = inputPart.getBody(InputStream.class, null);
+                        // Use a placeholder or default name if necessary
+                        Path filePath = Paths.get("uploaded_file"); 
+                        String fileContent = new String(inputStream.readAllBytes());
+                        submissionFiles.put(filePath, fileContent);
+                    }
+                }
+                return Response.ok(checkService.run(submissionFiles)).type(MediaType.TEXT_PLAIN).build();
+
+            } else if (MediaType.APPLICATION_JSON.equals(contentType)) {
+                // Process JSON data
+                String jsonString = uriInfo.getQueryParameters().getFirst("jsonBody");
+                JsonNode json = new ObjectMapper().readTree(jsonString);
+                return Response.ok(checkService.runJSON(json)).type(MediaType.APPLICATION_JSON).build();
+
+            } else {
+                return Response.serverError().entity("Bad content type").build();
             }
-        }, executorService);
+        } catch (Exception ex) {
+            return Response.serverError().entity(ex.getMessage()).build();
+        }
     }
 
     @POST
