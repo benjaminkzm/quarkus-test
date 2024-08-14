@@ -1,10 +1,7 @@
 package controllers;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -13,22 +10,23 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import org.jboss.resteasy.plugins.providers.multipart.InputPart;
-import org.jboss.resteasy.plugins.providers.multipart.MultipartFormDataInput;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.horstmann.codecheck.Util;
 
+import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.core.NewCookie;
+import jakarta.ws.rs.core.PathSegment;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import services.CheckService;
@@ -38,7 +36,7 @@ import services.CheckService;
 public class Check {
 
     private static final ExecutorService executorService = Executors.newFixedThreadPool(10);
-    private ObjectMapper objectMapper;
+    private ObjectMapper objectMapper = new ObjectMapper();
 
     @Inject
     private CheckService checkService;
@@ -52,33 +50,112 @@ public class Check {
     @POST
     @jakarta.ws.rs.Path("/html")
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
-    public CompletableFuture<Response> checkHTML(MultivaluedMap<String, String> params) throws IOException, InterruptedException {
-        return CompletableFuture.supplyAsync(() -> {
+    public Uni<Response> checkHTML(@Context HttpServletRequest request, MultivaluedMap<String, String> formParams) {
+        return Uni.createFrom().item(() -> {
             try {
                 Map<Path, String> submissionFiles = new TreeMap<>();
                 String repo = "";
                 String problem = "";
                 String ccid = null;
-
-                for (String key : params.keySet()) {
-                    String value = params.getFirst(key);
-                    if ("repo".equals(key))
+                
+                for (Map.Entry<String, List<String>> entry : formParams.entrySet()) {
+                    String key = entry.getKey();
+                    String value = entry.getValue().get(0);
+                    if (key.equals("repo"))
                         repo = value;
-                    else if ("problem".equals(key))
+                    else if (key.equals("problem"))
                         problem = value;
-                    else if (!"ccid".equals(key))
+                    else if (!key.equals("ccid"))
                         ccid = value;
                     else
                         submissionFiles.put(Paths.get(key), value);
                 }
-
+                
+                // Get the ccid from cookies
                 if (ccid == null) {
-                    Optional<String> ccidCookie = Optional.ofNullable(uriInfo.getQueryParameters().getFirst("ccid"));
-                    ccid = ccidCookie.orElse(Util.createPronouncableUID());
+                    jakarta.servlet.http.Cookie[] cookies = request.getCookies();
+                    if (cookies != null) {
+                        for (jakarta.servlet.http.Cookie cookie : cookies) {
+                            if ("ccid".equals(cookie.getName())) {
+                                ccid = cookie.getValue();
+                                break;
+                            }
+                        }
+                    }
+                    if (ccid == null) {
+                        ccid = com.horstmann.codecheck.Util.createPronouncableUID();
+                    }
                 }
-
+                
                 String result = checkService.checkHTML(repo, problem, ccid, submissionFiles);
-                return Response.ok(result).type(MediaType.TEXT_HTML).header("Set-Cookie", "ccid=" + ccid).build();
+
+                // Create a NewCookie using Builder
+                NewCookie newCookie = new NewCookie.Builder("ccid")
+                        .value(ccid)
+                        .path("/")
+                        .maxAge(60 * 60) // 1 hour
+                        .build();
+
+                // Build response with the cookie
+                Response.ResponseBuilder responseBuilder = Response.ok(result).type("text/html");
+                responseBuilder.cookie(newCookie);
+
+                return responseBuilder.build();
+            } catch (Exception ex) {
+                return Response.serverError().entity(Util.getStackTrace(ex)).build();
+            }
+        });
+    }
+
+    // Method for handling form-urlencoded data
+    @POST
+    @jakarta.ws.rs.Path("/run")
+    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+    public CompletableFuture<Response> runFormPost(MultivaluedMap<String, String> params) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                // Handle form-urlencoded data here
+                String result = checkService.runFormPost(params);
+                return Response.ok(result).type(MediaType.TEXT_PLAIN).build();
+            } catch (Exception ex) {
+                return Response.serverError().entity(Util.getStackTrace(ex)).build();
+            }
+        }, executorService);
+    }
+
+    // Method for handling multipart form data
+    @POST
+    @jakarta.ws.rs.Path("/run")
+    @Consumes(MediaType.MULTIPART_FORM_DATA)
+    public CompletableFuture<Response> runFileUpload(
+        @Context PathSegment description,
+        @Context PathSegment fileUpload) {
+
+    return CompletableFuture.supplyAsync(() -> {
+        try {
+            byte[] fileContentBytes = fileUpload.getPath().getBytes();
+            String fileContent = new String(fileContentBytes); // Read file content
+
+            Path filePath = Paths.get(fileUpload.getPath());
+            Map<Path, String> submissionFiles = Map.of(filePath, fileContent);
+            String result = checkService.runFileUpload(description.getPath(), submissionFiles);
+            return Response.ok(result).type(MediaType.TEXT_PLAIN).build();
+        } catch (Exception ex) {
+            return Response.serverError().entity(Util.getStackTrace(ex)).build();
+        }
+    }, executorService);
+}
+
+    // Method for handling JSON data
+    @POST
+    @jakarta.ws.rs.Path("/run")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public CompletableFuture<Response> runJSON(JsonNode json) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                ObjectNode resultNode = checkService.runJSON(json);  // Get the result as ObjectNode
+                String result = resultNode.toString();  // Convert ObjectNode to JSON string
+                return Response.ok(result).type(MediaType.APPLICATION_JSON).build();  // Send JSON response
             } catch (Exception ex) {
                 return Response.serverError().entity(Util.getStackTrace(ex)).build();
             }
@@ -86,61 +163,9 @@ public class Check {
     }
 
     @POST
-    @jakarta.ws.rs.Path("/run")
-    @Consumes({ MediaType.APPLICATION_FORM_URLENCODED, MediaType.MULTIPART_FORM_DATA, MediaType.APPLICATION_JSON })
-    public Response run(MultipartFormDataInput input) {
-        try {
-            String contentType = headers.getHeaderString(HttpHeaders.CONTENT_TYPE);
-            Map<Path, String> submissionFiles = new TreeMap<>();
-
-            if (MediaType.APPLICATION_FORM_URLENCODED.equals(contentType)) {
-                // Form-urlencoded processing
-                Map<String, List<InputPart>> formData = input.getFormDataMap();
-                List<InputPart> params = formData.get("params"); // Retrieve form fields
-                if (params != null) {
-                    for (InputPart inputPart : params) {
-                        String key = "unknown"; // Default key or handle differently
-                        String value = inputPart.getBodyAsString(); // Get form field value
-                        submissionFiles.put(Paths.get(key), value);
-                    }
-                }
-                return Response.ok(checkService.run(submissionFiles)).type(MediaType.TEXT_PLAIN).build();
-
-            } else if (MediaType.MULTIPART_FORM_DATA.equals(contentType)) {
-                // Process multipart form data
-                Map<String, List<InputPart>> formData = input.getFormDataMap();
-                
-                // Process files
-                List<InputPart> fileParts = formData.get("file"); // Get files part
-                if (fileParts != null) {
-                    for (InputPart inputPart : fileParts) {
-                        InputStream inputStream = inputPart.getBody(InputStream.class, null);
-                        // Use a placeholder or default name if necessary
-                        Path filePath = Paths.get("uploaded_file"); 
-                        String fileContent = new String(inputStream.readAllBytes());
-                        submissionFiles.put(filePath, fileContent);
-                    }
-                }
-                return Response.ok(checkService.run(submissionFiles)).type(MediaType.TEXT_PLAIN).build();
-
-            } else if (MediaType.APPLICATION_JSON.equals(contentType)) {
-                // Process JSON data
-                String jsonString = uriInfo.getQueryParameters().getFirst("jsonBody");
-                JsonNode json = new ObjectMapper().readTree(jsonString);
-                return Response.ok(checkService.runJSON(json)).type(MediaType.APPLICATION_JSON).build();
-
-            } else {
-                return Response.serverError().entity("Bad content type").build();
-            }
-        } catch (Exception ex) {
-            return Response.serverError().entity(ex.getMessage()).build();
-        }
-    }
-
-    @POST
     @jakarta.ws.rs.Path("/njs")
     @Consumes({ MediaType.APPLICATION_FORM_URLENCODED, MediaType.APPLICATION_JSON })
-    public CompletableFuture<Response> checkNJS() throws IOException, InterruptedException {
+    public CompletableFuture<Response> checkNJS() {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 String ccid = null;
@@ -160,11 +185,7 @@ public class Check {
                 } else if (MediaType.APPLICATION_JSON.equals(headers.getHeaderString(HttpHeaders.CONTENT_TYPE))) {
                     String jsonString = uriInfo.getQueryParameters().getFirst("jsonBody"); // Get JSON string from query parameter
                     JsonNode json = objectMapper.readTree(jsonString); // Parse JSON string to JsonNode
-                    Iterator<Map.Entry<String, JsonNode>> iter = json.fields();
-                    while (iter.hasNext()) {
-                        Map.Entry<String, JsonNode> entry = iter.next();
-                        submissionFiles.put(Paths.get(entry.getKey()), entry.getValue().asText());
-                    }
+                    json.fields().forEachRemaining(entry -> submissionFiles.put(Paths.get(entry.getKey()), entry.getValue().asText()));
                 }
 
                 if (ccid == null) {

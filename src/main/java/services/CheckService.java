@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeMap;
@@ -19,6 +20,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.core.MultivaluedMap;
 import models.CodeCheck;
 
 @ApplicationScoped
@@ -47,6 +49,29 @@ public class CheckService {
         }
         return report;
     }
+
+    public String runFileUpload(String repo, Map<Path, String> submissionFiles) 
+            throws NoSuchMethodException, IOException, InterruptedException, ScriptException {
+        // Your logic here, for example:
+        String report = codeCheck.run("FileUpload",submissionFiles);
+        if (report == null || report.isEmpty()) {
+            report = "No report generated.";
+        }
+        return report;
+    }
+
+    public String runFormPost(MultivaluedMap<String, String> formParams) {
+    StringBuilder report = new StringBuilder("Processed form data:\n");
+
+    for (Map.Entry<String, List<String>> entry : formParams.entrySet()) {
+        report.append(entry.getKey()).append(": ");
+        entry.getValue().forEach(value -> report.append(value).append(", "));
+        report.setLength(report.length() - 2); // Remove the last comma and space
+        report.append("\n");
+    }
+
+    return report.toString();
+}
 
     public ObjectNode runJSON(JsonNode json)
             throws NoSuchMethodException, IOException, InterruptedException, ScriptException {
