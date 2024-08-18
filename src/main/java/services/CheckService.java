@@ -52,7 +52,6 @@ public class CheckService {
 
     public String runFileUpload(String repo, Map<Path, String> submissionFiles) 
             throws NoSuchMethodException, IOException, InterruptedException, ScriptException {
-        // Your logic here, for example:
         String report = codeCheck.run("FileUpload",submissionFiles);
         if (report == null || report.isEmpty()) {
             report = "No report generated.";

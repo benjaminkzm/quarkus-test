@@ -26,7 +26,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
-import models.CodeCheck; // Import for escaping HTML
+import models.CodeCheck;
 
 @RequestScoped
 @jakarta.ws.rs.Path("/")
