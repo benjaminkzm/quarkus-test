@@ -32,7 +32,7 @@ import jakarta.ws.rs.core.UriInfo;
 import services.CheckService;
 
 @ApplicationScoped
-@jakarta.ws.rs.Path("/check")
+@jakarta.ws.rs.Path("/")
 public class Check {
 
     private static final ExecutorService executorService = Executors.newFixedThreadPool(10);
@@ -48,10 +48,9 @@ public class Check {
     private HttpHeaders headers;
 
     @POST
-    @jakarta.ws.rs.Path("/html")
+    @jakarta.ws.rs.Path("/check")
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
-    public Uni<Response> checkHTML(@Context HttpServletRequest request, MultivaluedMap<String, String> formParams) {
-        return Uni.createFrom().item(() -> {
+    public Response checkHTML(@Context HttpServletRequest request, MultivaluedMap<String, String> formParams) {
             try {
                 Map<Path, String> submissionFiles = new TreeMap<>();
                 String repo = "";
@@ -104,15 +103,13 @@ public class Check {
             } catch (Exception ex) {
                 return Response.serverError().entity(Util.getStackTrace(ex)).build();
             }
-        });
     }
 
     // Method for handling form-urlencoded data
     @POST
     @jakarta.ws.rs.Path("/run")
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
-    public CompletableFuture<Response> runFormPost(MultivaluedMap<String, String> params) {
-        return CompletableFuture.supplyAsync(() -> {
+    public Response runFormPost(MultivaluedMap<String, String> params) {
             try {
                 // Handle form-urlencoded data here
                 String result = checkService.runFormPost(params);
@@ -120,18 +117,16 @@ public class Check {
             } catch (Exception ex) {
                 return Response.serverError().entity(Util.getStackTrace(ex)).build();
             }
-        }, executorService);
     }
 
     // Method for handling multipart form data
     @POST
     @jakarta.ws.rs.Path("/run")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
-    public CompletableFuture<Response> runFileUpload(
+    public Response runFileUpload(
         @Context PathSegment description,
         @Context PathSegment fileUpload) {
 
-    return CompletableFuture.supplyAsync(() -> {
         try {
             byte[] fileContentBytes = fileUpload.getPath().getBytes();
             String fileContent = new String(fileContentBytes); // Read file content
@@ -143,15 +138,13 @@ public class Check {
         } catch (Exception ex) {
             return Response.serverError().entity(Util.getStackTrace(ex)).build();
         }
-    }, executorService);
 }
 
     // Method for handling JSON data
     @POST
     @jakarta.ws.rs.Path("/run")
     @Consumes(MediaType.APPLICATION_JSON)
-    public CompletableFuture<Response> runJSON(JsonNode json) {
-        return CompletableFuture.supplyAsync(() -> {
+    public Response runJSON(JsonNode json) {
             try {
                 ObjectNode resultNode = checkService.runJSON(json);  // Get the result as ObjectNode
                 String result = resultNode.toString();  // Convert ObjectNode to JSON string
@@ -159,14 +152,12 @@ public class Check {
             } catch (Exception ex) {
                 return Response.serverError().entity(Util.getStackTrace(ex)).build();
             }
-        }, executorService);
     }
 
     @POST
     @jakarta.ws.rs.Path("/njs")
     @Consumes({ MediaType.APPLICATION_FORM_URLENCODED, MediaType.APPLICATION_JSON })
-    public CompletableFuture<Response> checkNJS() {
-        return CompletableFuture.supplyAsync(() -> {
+    public Response checkNJS() {
             try {
                 String ccid = null;
                 String repo = "ext";
@@ -198,6 +189,5 @@ public class Check {
             } catch (Exception ex) {
                 return Response.serverError().entity(Util.getStackTrace(ex)).build();
             }
-        }, executorService);
     }
 }
