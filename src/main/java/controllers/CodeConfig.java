@@ -4,20 +4,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Optional;
 
+import org.eclipse.microprofile.config.Config;
+import org.eclipse.microprofile.config.ConfigProvider;
+
 import com.horstmann.codecheck.ResourceLoader;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 
 @ApplicationScoped
-public class Config implements ResourceLoader {
-
-    private final Config config;
-
-    @Inject
-    public Config(Config config) {
-        this.config = config;
-    }
+public class CodeConfig implements ResourceLoader {
 
     @Override
     public InputStream loadResource(String path) throws IOException {
@@ -34,6 +29,7 @@ public class Config implements ResourceLoader {
     }
 
     public <T> Optional<T> getOptionalValue(String key, Class<T> type) {
+        Config config = ConfigProvider.getConfig();
         return config.getOptionalValue(key, type);
     }
 

@@ -31,7 +31,7 @@ import com.horstmann.codecheck.Problem;
 import com.horstmann.codecheck.ResourceLoader;
 import com.horstmann.codecheck.Util;
 
-import controllers.Config;
+import controllers.CodeConfig;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jdk.security.jarsigner.JarSigner;
@@ -41,12 +41,12 @@ public class CodeCheck {
     private static final Logger logger = LoggerFactory.getLogger(CodeCheck.class);
 
     private final ProblemConnector probConn;
-    private final Config config;
+    private final CodeConfig config;
     private JarSigner signer;
     private final ResourceLoader resourceLoader;
 
     @Inject
-    public CodeCheck(ProblemConnector probConn, Config config) {
+    public CodeCheck(ProblemConnector probConn, CodeConfig config) {
         this.probConn = probConn;
         this.config = config; // Assign injected Config instance
         this.resourceLoader = new ResourceLoader() {
